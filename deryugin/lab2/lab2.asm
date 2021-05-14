@@ -1,4 +1,3 @@
-
 TESTPC SEGMENT
    ASSUME CS:TESTPC, DS:TESTPC, ES:NOTHING, SS:NOTHING
    ORG 100h
@@ -6,7 +5,7 @@ START: JMP BEGIN
 ; ДАННЫЕ
    UNAVAILABLE_MEMORY 		db  'address of unavailable memory:     ',0DH,0AH,'$'
    ADDRESS_OF_ENVIRONMENT   db  'address of environment:     ',0DH,0AH,'$'
-   TAIL  					db 'tail:',0DH,0AH,'$'
+   TAIL  					db 'tail:       ',0DH,0AH,'$'
    EMPTY_TAIL 				db 'tail is empty',0DH,0AH,'$'
    CONTENT_OF_ENVIRONMENT   db 'content of environment:',0DH,0AH,'$'
    PATH  					db 'path: ','$'
@@ -110,9 +109,12 @@ ADDRESS_OF_ENVIRONMENT_PROC proc near
    ret
 ADDRESS_OF_ENVIRONMENT_PROC ENDP
 
-TAIL_PROC proc near 
+TAIL_PROC proc near
+	push cx
 	sub cx, cx
 	mov cl, ds:[80h]
+	mov si, offset TAIL
+	add si, 6
 	cmp cl, 0
 	je empty_tail_m
 	sub ax, ax
@@ -120,12 +122,17 @@ TAIL_PROC proc near
 print_tail:
 	mov al, ds:[81h + di]
 	inc di
-	call print
+	mov [si], al
+	inc si
 	loop print_tail
+	mov dx, offset TAIL
+	jmp ending
 	
 empty_tail_m:
 	mov dx, offset EMPTY_TAIL
+ending:
 	call print
+	pop cx
 
 	ret
 TAIL_PROC ENDP
@@ -183,7 +190,9 @@ BEGIN:
    call PATH_PROC
    
    xor al,al
+   mov ah,01h
+   int 21h 
    mov ah,4Ch
    int 21h
 TESTPC ENDS
-END START 
+END START  
