@@ -101,6 +101,8 @@ looping:
 
 ROUT endp
 
+LAST:
+
 print proc near	
     mov	AH,	09h
 	int	21h
@@ -292,7 +294,6 @@ Main proc far
 	finish:
 	mov ah, 4ch
 	int 21h
-	LAST:
 
 Main endp
 
