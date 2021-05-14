@@ -1,5 +1,5 @@
 AStack SEGMENT STACK
- DB 1000 DUP(?)
+ DW 100 DUP(?)
 AStack ENDS
 
 DATA SEGMENT
@@ -18,13 +18,24 @@ CODE SEGMENT
 	
 ROUT PROC FAR
 	jmp start
-	KEEP_CS DW 0; для хранения сегмента
-	KEEP_IP DW 0; и мещения прерывания
+	KEEP_CS DW 0
+	KEEP_IP DW 0
 	KEEP_PSP DW 0
+	KEEP_SP DW 0
+	KEEP_SS DW 0
+	KEEP_AX DW 0
 	SIGNATURE DW 1234h
 	
 	SUMMARY DW 0h
+	NEW_STACK DW 100 DUP(?)
 	start:
+	
+	mov KEEP_SP, sp
+	mov KEEP_SS, ss
+	mov KEEP_AX, ax
+	mov sp, offset start
+	mov ax, seg NEW_STACK
+	mov ss, ax
 	
 	push ax
 	push cx
@@ -95,6 +106,10 @@ looping:
 	pop bx
 	pop cx
 	pop ax
+	
+	mov ss, KEEP_SS
+	mov sp, KEEP_SP
+	mov ax, KEEP_AX
 	mov al,20h
 	out 20h,al
 	iret
