@@ -1,9 +1,14 @@
 ASTACK SEGMENT STACK
-   DW 1000 DUP (?)   
+   DW 200 DUP (?)   
 ASTACK ENDS
 
 DATA SEGMENT
 
+CMD DB 1h, 0dh
+POS db 128 DUP(0)
+KEEP_SS DW 0
+KEEP_SP DW 0
+KEEP_PSP DW 0
 BLOCKED_DESTROYED db 'Block destroyed' , 13, 10, '$'
 LOW_MEMORY db 'Low memory', 13, 10, '$'
 INVALID_ADRESS_OF_BLOCK db 'Invalid adress of block', 13, 10, '$'
@@ -13,7 +18,7 @@ DISK_ERROR db 'Disk error', 13, 10, '$'
 INCORRECT_ENVIRONMENT_STRING db 'Incorret environment string', 13, 10, '$'
 INVALID_FORMAT db 'Invalid format', 13, 10, '$'
 
-NORMAL db 13, 10,'Normal exit   ', 13, 10, '$'
+NORMAL db 13, 10,'Normal exit         ', 13, 10, '$'
 CTRL_BREAK db 'Programm finished using ctrl-break ', 13, 10, '$'
 DEVICE_ERROR db 13, 10,'Device error ', 13, 10, '$'
 FUNCTION_31H db 13, 10,'Finished by 31h ', 13, 10, '$'
@@ -22,19 +27,13 @@ fpb dw 0
     dd 0
     dd 0
     dd 0
+	DATA_END DB 0
 DATA ENDS
 
 
-CODE SEGMENT
-	 ASSUME CS:CODE, DS:DATA, SS:ASTACK
 
-print PROC near
-			push ax
-			mov ah, 09h
-			int 21h
-			pop ax
-			ret
-print ENDP
+CODE SEGMENT
+   ASSUME CS:CODE, DS:DATA, SS:AStack
 
 BYTE_TO_DEC PROC near
 ;Перевод в 10чную с/с, SI - адрес младшей цифры
@@ -59,77 +58,41 @@ end_l: 		pop DX
 			ret
 BYTE_TO_DEC ENDP
 
-SET_FPB PROC NEAR
-		    mov ax,es:[2ch]
-		    mov fpb,ax
-		    mov fpb+2,es
-		    mov fpb+4,80h
-		    ret
-SET_FPB ENDP
+print PROC
+ 	push ax
+ 	mov ah, 09h
+ 	int 21h 
+ 	pop ax
+ 	ret
+print ENDP
 
-PORSSESING_PROC PROC NEAR
-			push ax
-			mov ah, 4dh
-			int 21h
-			
-			cmp ah, 0
-			je normal_l
-			
-			cmp ah, 1
-			je ctrl_break_l
-			
-			cmp ah, 2
-			je device_error_l
-			
-			cmp ah, 3
-			je func_31h
-			
-			normal_l:
-			mov si, offset NORMAL
-			add si, 16
-			call BYTE_TO_DEC
-			mov dx, offset NORMAL
-			call print	
-			jmp exit
-			
-			ctrl_break_l:
-			mov dx, offset CTRL_BREAK
-			call print
-			jmp exit
-			
-			device_error_l:
-			mov dx, offset DEVICE_ERROR
-			call print
-			jmp exit
-			
-			func_31h:
-			mov dx, offset FUNCTION_31H
-			call print
-			jmp exit
-			
-			exit:
-			pop ax
-			ret
-PORSSESING_PROC ENDP
 
-CHANGE_MEMORY PROC NEAR
-		
-	jmp start
-	KEEP_SS dw 0
-	KEEP_SP dw 0
-	KEEP_DS dw 0
-	
-	start:
-	
+CHANGE_MEMORY PROC 
+	push ax
 	push bx
-	mov bx, 500
-	mov ah,4ah
-	int 21h
-	pop bx
-	jnc success
-	; error
+	push cx
+	push dx
 	
-	cmp ax, 7
+	mov ax, offset DATA_END
+	mov bx, offset PR_END
+	add bx, ax	
+	mov cl, 4
+	shr bx, cl
+	add bx, 2bh
+	mov ah, 4ah
+	int 21h 
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	jnc success
+cmp ax, 7
 	je block_destroyed_l
 	
 	cmp ax, 8
@@ -154,25 +117,48 @@ CHANGE_MEMORY PROC NEAR
 	mov dx, offset INVALID_ADRESS_OF_BLOCK
 	call print
 	jmp ending
-	
-	;success
-	success:
-	
-	call SET_FPB 
-	mov bx, offset fpb	
-	
-	mov dx, offset FILE_NAME 
-	
-	mov KEEP_SS, ss
-	mov KEEP_SP, sp
-	mov KEEP_DS, ds
-		
 
-			
-	mov ax,4B00h 
-	int 21h
+success:
+
+	call FIND_PATH
+	call PORSSESING_PROC 
+	
+ending:
+	pop dx
+	pop cx
+	pop bx
+	pop ax
+	ret
+
+CHANGE_MEMORY ENDP
+
+
+PORSSESING_PROC  PROC
+	push ax
+	push bx
+	push cx
+	push dx
+	push ds
+	push es
+	
+	mov KEEP_SP, sp
+	mov KEEP_SS, ss	
+	mov ax, DATA
+	mov es, ax
+	mov bx, offset fpb
+	mov dx, offset CMD
+	mov [bx+2], dx
+	mov [bx+4], ds 
+	mov dx, offset POS	
+	mov ax, 4b00h 
+	int 21h 
+	
+	mov ss, KEEP_SS
+	mov sp, KEEP_SP
+	pop es
+	pop ds
 	jnc prossesing
-		
+	
 	
 	cmp ax, 1
 	je incorrect_number
@@ -222,31 +208,131 @@ CHANGE_MEMORY PROC NEAR
 	mov dx, offset INVALID_FORMAT
 	call print
 	jmp restore
-			
-	prossesing:
-	call PORSSESING_PROC
 	
 	
-	restore:
-	mov ss,keep_ss
-	mov sp,keep_sp
-	mov ds, keep_ds
-			
-	jmp ending
-			
+	
 
+prossesing:
+	mov ah, 4dh
+	mov al, 00h
+	int 21h 
 	
+	cmp ah, 0
+	je normal_l
+	
+	cmp ah, 1
+	je ctrl_break_l
 		
-	ending:
-	ret
-CHANGE_MEMORY ENDP
+	cmp ah, 2
+	je device_error_l
+			
+	cmp ah, 3
+	je func_31h
+			
+	normal_l:
+	mov si, offset NORMAL
+	add si, 16
+	call BYTE_TO_DEC
+	mov dx, offset NORMAL
+	call print	
+	jmp restore
+			
+	ctrl_break_l:
+	mov dx, offset CTRL_BREAK
+	call print
+	jmp restore
+			
+	device_error_l:
+	mov dx, offset DEVICE_ERROR
+	call print
+	jmp restore
+			
+	func_31h:
+	mov dx, offset FUNCTION_31H
+	call print
+	jmp restore
 
-MAIN PROC FAR
+restore :
+	pop dx
+	pop cx
+	pop bx
+	pop ax
+	ret
+
+PORSSESING_PROC  ENDP
+
+
+FIND_PATH PROC 
+	push ax
+	push bx
+	push cx 
+	push dx
+	push di
+	push si
+	push es
+	
+	mov ax, KEEP_PSP
+	mov es, ax
+	mov es, es:[2ch]
+	mov bx, 0
+	
+find_path_l:
+	inc bx
+	cmp byte ptr es:[bx-1], 0
+	jne find_path_l
+	cmp byte ptr es:[bx+1], 0 
+	jne find_path_l
+	add bx, 2
+	mov di, 0
+	
+loop_l:
+	mov dl, es:[bx]
+	mov byte ptr [POS + di], dl
+	inc di
+	inc bx
+	cmp dl, 0
+	je end_loop_l
+	cmp dl, '\'
+	jne loop_l
+	mov cx, di
+	jmp loop_l
+
+end_loop_l:
+	mov di, cx
+	mov si, 0
+	
+finishing:
+	mov dl, byte ptr [FILE_NAME + si]
+	mov byte ptr [POS + di], dl
+	inc di 
+	inc si
+	cmp dl, 0 
+	jne finishing
+		
+	pop es
+	pop si
+	pop di
+	pop dx
+	pop cx
+	pop bx
+	pop ax
+
+	ret
+FIND_PATH ENDP
+
+
+BEGIN PROC far
 	mov ax,DATA
 	mov ds,ax
-	call CHANGE_MEMORY
+	mov KEEP_PSP, es
+	call CHANGE_MEMORY 
+	xor al, al
 	mov ah, 4ch
 	int 21h
-MAIN 	ENDP
+
+BEGIN ENDP
+
+
+PR_END:
 CODE ENDS
-     END MAIN
+END BEGIN
